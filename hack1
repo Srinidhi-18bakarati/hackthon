@@ -1,0 +1,103 @@
+import streamlit as st
+import cv2
+import re
+
+st.set_page_config(page_title="Quantum Sentinel", layout="centered")
+
+st.title("⚛️ Quantum Sentinel - Fraud Shield")
+
+# INPUTS
+phone = st.text_input("📞 Enter Mobile Number")
+upi = st.text_input("🆔 Enter UPI ID")
+amount = st.text_input("💰 Amount (optional)")
+
+# Store QR
+if "qrData" not in st.session_state:
+    st.session_state.qrData = ""
+
+# 🔳 QR SCANNER
+if st.button("📷 Scan QR Code"):
+    cap = cv2.VideoCapture(0)
+    detector = cv2.QRCodeDetector()
+
+    st.info("Scanning... Press Q to stop")
+
+    while True:
+        ret, frame = cap.read()
+        data, bbox, _ = detector.detectAndDecode(frame)
+
+        if data:
+            st.session_state.qrData = data
+            st.success(f"QR Detected: {data}")
+
+            if "pa=" in data:
+                upi_qr = data.split("pa=")[1].split("&")[0]
+                st.info(f"UPI from QR: {upi_qr}")
+
+            break
+
+        cv2.imshow("QR Scanner", frame)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+# 🧠 FRAUD DETECTION
+def detect(phone, upi, qr):
+
+    if phone:
+        if not re.match(r'^[6-9]\d{9}$', phone):
+            return "🚨 Fraud", "Invalid Indian number"
+
+        if len(set(phone)) == 1 or phone == "1234567890":
+            return "🚨 Fraud", "Suspicious pattern"
+
+        return "✅ Safe", "Valid number"
+
+    if upi:
+        if not re.match(r'^[\w.\-]+@[\w.\-]+$', upi):
+            return "🚨 Fraud", "Invalid UPI format"
+
+        if "scam" in upi.lower():
+            return "🚨 Fraud", "Suspicious UPI ID"
+
+        return "✅ Safe", "Valid UPI"
+
+    if qr:
+        qr = qr.lower()
+
+        if "upi://" in qr:
+            return "✅ Safe", "Valid UPI QR"
+
+        if "http" in qr:
+            return "🚨 Fraud", "Fake payment link"
+
+        return "⚠️ Suspicious", "Unknown QR"
+
+    return "⚠️ Suspicious", "No input"
+
+# 🔍 CHECK
+if st.button("🔍 Check Transaction"):
+
+    status, reason = detect(phone, upi, st.session_state.qrData)
+
+    if "Safe" in status:
+        st.success(status)
+    else:
+        st.error(status)
+
+    st.write("🧠 Reason:", reason)
+
+    if phone:
+        st.write("🔎 Checked using: Phone")
+    elif upi:
+        st.write("🔎 Checked using: UPI")
+    elif st.session_state.qrData:
+        st.write("🔎 Checked using: QR")
+
+    st.write("💰 Amount:", amount)
+
+    if "Fraud" in status:
+        st.warning("🚨 ALERT: Do NOT proceed!")
